@@ -1,0 +1,17 @@
+{
+  "name": "will-proxy-server",
+  "version": "1.0.0",
+  "description": "Secure proxy server for WILL AI Assistant",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "vercel build",
+    "deploy": "vercel"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
