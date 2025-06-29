@@ -1,6 +1,5 @@
+// api/gemini.js  — Vercel, Node 20
 export const config = { runtime: 'nodejs20.x' };
-// api/gemini.js — Vercel Node 18
-export const config = { runtime: 'nodejs18.x' };
 
 /* ---- CORS ---- */
 const cors = {
@@ -12,20 +11,22 @@ const cors = {
 
 /* ---- приоритет моделей ---- */
 const MODELS = [
-  'gemini-1.5-pro',      // умный, 50 REQ/день
-  'gemini-1.5-flash'     // быстрый запасной
+  'gemini-1.5-pro',
+  'gemini-1.5-flash'
 ];
 
-/* ---- обработчик ---- */
+/* ---- handler ---- */
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
     return res.status(200).end();
   }
+
   if (req.method !== 'POST') {
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
+
   Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
 
   try {
@@ -37,9 +38,9 @@ export default async function handler(req, res) {
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
       const g = await fetch(url, {
-        method: 'POST',
+        method : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body   : JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }]
         })
       });
@@ -50,11 +51,12 @@ export default async function handler(req, res) {
         return res.status(200).json({ reply, model });
       }
 
-      if ([429, 403].includes(g.status)) continue;       // квота — пробуем следующую
+      if ([429, 403].includes(g.status)) continue; // квота → пробуем следующую
       return res.status(g.status).json({ error: await g.text() });
     }
 
     return res.status(503).json({ error: 'All models exhausted' });
+
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
