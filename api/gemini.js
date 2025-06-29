@@ -15,16 +15,6 @@ const MODELS = [
   'gemini-1.5-flash'
 ];
 
-// ---- System Instruction: The FIX for the "Wall of Text" ----
-// We are now explicitly commanding the AI to use Markdown for formatting.
-// This will ensure all responses have proper line breaks, paragraphs, and lists.
-const systemInstruction = {
-  parts: [
-    { text: "You are WILL, a helpful assistant. Format your responses using Markdown. ALWAYS use line breaks, paragraphs, and bullet points to ensure the text is readable and not a single block." }
-  ]
-};
-
-
 /* ---- handler ---- */
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
@@ -43,6 +33,11 @@ export default async function handler(req, res) {
     const { prompt } = req.body || {};
     if (!prompt) return res.status(400).json({ error: 'No prompt' });
 
+    // --- THE NEW, RELIABLE FIX for formatting ---
+    // We prepend the instruction directly to the user's prompt.
+    // This is a robust way to ensure the AI gets the message.
+    const fullPrompt = `Format your entire response using Markdown with proper line breaks, paragraphs, and lists. Do not write a single block of text.\n\n${prompt}`;
+
     for (const model of MODELS) {
       const url =
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -51,9 +46,8 @@ export default async function handler(req, res) {
         method : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body   : JSON.stringify({
-          // The system instruction is now included with every request
-          systemInstruction: systemInstruction,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          // The instruction is now part of the prompt itself.
+          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
         })
       });
 
@@ -63,7 +57,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ reply, model });
       }
 
-      if ([429, 403].includes(g.status)) continue; // квота → пробуем следующую
+      if ([429, 403].includes(g.status)) continue;
       return res.status(g.status).json({ error: await g.text() });
     }
 
