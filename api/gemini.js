@@ -1,64 +1,60 @@
-import React, { useState, useEffect } from 'react';
+// api/gemini.js — Vercel Node 18
+export const config = { runtime: 'nodejs18.x' };
 
-const KB_FILES = [
-  'WILL%20DATABASE/WILL%20PART%20I%20SR%20GR.txt',
-  'WILL%20DATABASE/WILL%20PART%20II%20COSMO%20.txt',
-  'WILL%20DATABASE/WILL%20PART%20III%20QM%20.txt'
+/* ---- CORS ---- */
+const cors = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age':       '86400'
+};
+
+/* ---- приоритет моделей ---- */
+const MODELS = [
+  'gemini-1.5-pro',      // умный, 50 REQ/день
+  'gemini-1.5-flash'     // быстрый запасной
 ];
 
-const MAX_KB_CHARS = 30000;        // ← ограничиваем размер вставляемой базы
+/* ---- обработчик ---- */
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(200).end();
+  }
+  if (req.method !== 'POST') {
+    Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+  Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
 
-async function loadKnowledge() {
-  const base = 'https://raw.githubusercontent.com/AntonRize/WILL/main/';
-  const texts = await Promise.all(
-    KB_FILES.map(path => fetch(base + path).then(r => r.text()))
-  );
-  return texts.join('\n');
-}
+  try {
+    const { prompt } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: 'No prompt' });
 
-export default function App() {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [knowledge, setKnowledge] = useState('');
+    for (const model of MODELS) {
+      const url =
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-  useEffect(() => { loadKnowledge().then(setKnowledge); }, []);
+      const g = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        })
+      });
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
+      if (g.ok) {
+        const j = await g.json();
+        const reply = j.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        return res.status(200).json({ reply, model });
+      }
 
-    setMessages([...messages, { role: 'user', content: input }]);
-    setInput('');
+      if ([429, 403].includes(g.status)) continue;       // квота — пробуем следующую
+      return res.status(g.status).json({ error: await g.text() });
+    }
 
-    const prompt = `${input}\n\nKnowledge:\n${knowledge.slice(0, MAX_KB_CHARS)}`;
-
-    const res   = await fetch('https://proxy-flame-seven.vercel.app/api/gemini', {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify({ prompt })
-    });
-
-    const data  = await res.json();
-    setMessages(m => [...m, { role: 'assistant', content: data.reply || data.error }]);
-  };
-
-  return (
-    <div style={{ padding: 24, fontFamily: 'sans-serif' }}>
-      <h1>WILL AI Assistant</h1>
-
-      {messages.map((m, i) => (
-        <div key={i} style={{ marginBottom: 8 }}>
-          <strong>{m.role === 'user' ? 'You' : 'AI'}:</strong> {m.content}
-        </div>
-      ))}
-
-      <input
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' ? sendMessage() : null}
-        placeholder="Ask something..."
-        style={{ width: '80%', marginRight: 8 }}
-      />
-      <button onClick={sendMessage}>Send</button>
-    </div>
-  );
+    return res.status(503).json({ error: 'All models exhausted' });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
 }
