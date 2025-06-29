@@ -9,7 +9,6 @@ const cors = {
   'Access-Control-Max-Age':       '86400'
 };
 
-/* ---- The correct, working models ---- */
 const MODELS = [
   'gemini-1.5-pro',
   'gemini-1.5-flash'
@@ -17,16 +16,15 @@ const MODELS = [
 
 /* ---- handler ---- */
 export default async function handler(req, res) {
+  // CORS and Method validation (no changes here)
   if (req.method === 'OPTIONS') {
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
     return res.status(200).end();
   }
-
   if (req.method !== 'POST') {
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
-
   Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
 
   try {
@@ -48,10 +46,20 @@ export default async function handler(req, res) {
       if (g.ok) {
         const j = await g.json();
         const reply = j.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        return res.status(200).json({ reply, model });
+        
+        // --- THIS IS THE CRITICAL DEBUGGING STEP ---
+        // We are now adding the raw, unmodified JSON response from Google
+        // to the output. This will let us see exactly what we're getting.
+        const debug_raw_response = JSON.stringify(j, null, 2); // Pretty-print the JSON
+
+        return res.status(200).json({ 
+          reply: reply, 
+          model: model,
+          debug_raw_response: `--- RAW AI RESPONSE ---\n${debug_raw_response}`
+        });
       }
 
-      if ([429, 403].includes(g.status)) continue; 
+      if ([429, 403].includes(g.status)) continue;
       return res.status(g.status).json({ error: await g.text() });
     }
 
