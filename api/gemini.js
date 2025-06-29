@@ -1,3 +1,4 @@
+export const config = { runtime: 'nodejs20.x' };
 // api/gemini.js — Vercel Node 18
 export const config = { runtime: 'nodejs18.x' };
 
