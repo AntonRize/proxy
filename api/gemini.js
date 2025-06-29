@@ -33,11 +33,6 @@ export default async function handler(req, res) {
     const { prompt } = req.body || {};
     if (!prompt) return res.status(400).json({ error: 'No prompt' });
 
-    // --- THE NEW, RELIABLE FIX for formatting ---
-    // We prepend the instruction directly to the user's prompt.
-    // This is a robust way to ensure the AI gets the message.
-    const fullPrompt = `Format your entire response using Markdown with proper line breaks, paragraphs, and lists. Do not write a single block of text.\n\n${prompt}`;
-
     for (const model of MODELS) {
       const url =
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -46,8 +41,7 @@ export default async function handler(req, res) {
         method : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body   : JSON.stringify({
-          // The instruction is now part of the prompt itself.
-          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
+          contents: [{ role: 'user', parts: [{ text: prompt }] }]
         })
       });
 
@@ -57,7 +51,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ reply, model });
       }
 
-      if ([429, 403].includes(g.status)) continue;
+      if ([429, 403].includes(g.status)) continue; // квота → пробуем следующую
       return res.status(g.status).json({ error: await g.text() });
     }
 
