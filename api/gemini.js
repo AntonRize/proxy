@@ -16,7 +16,6 @@ const MODELS = [
 
 /* ---- handler ---- */
 export default async function handler(req, res) {
-  // CORS and Method validation (no changes here)
   if (req.method === 'OPTIONS') {
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
     return res.status(200).end();
@@ -46,11 +45,7 @@ export default async function handler(req, res) {
       if (g.ok) {
         const j = await g.json();
         const reply = j.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        
-        // --- THIS IS THE CRITICAL DEBUGGING STEP ---
-        // We are now adding the raw, unmodified JSON response from Google
-        // to the output. This will let us see exactly what we're getting.
-        const debug_raw_response = JSON.stringify(j, null, 2); // Pretty-print the JSON
+        const debug_raw_response = JSON.stringify(j, null, 2);
 
         return res.status(200).json({ 
           reply: reply, 
