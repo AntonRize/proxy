@@ -9,10 +9,10 @@ const cors = {
   'Access-Control-Max-Age':       '86400'
 };
 
-/* ---- приоритет моделей ---- */
+/* ---- The correct, working models ---- */
 const MODELS = [
-  'gemini-2.5-pro',
-  'gemini-2.5-flash'
+  'gemini-1.5-pro',
+  'gemini-1.5-flash'
 ];
 
 /* ---- handler ---- */
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ reply, model });
       }
 
-      if ([429, 403].includes(g.status)) continue; // квота → пробуем следующую
+      if ([429, 403].includes(g.status)) continue; 
       return res.status(g.status).json({ error: await g.text() });
     }
 
