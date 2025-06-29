@@ -1,40 +1,42 @@
-// api/gemini.js  – Vercel Node 18 runtime
+// api/gemini.js   — Vercel Node 18 runtime
 
 // ---------- CORS ----------
-const cors = {
-  'Access-Control-Allow-Origin':  '*',               // можешь сузить до 'https://antonrize.github.io'
+const corsHeaders = {
+  'Access-Control-Allow-Origin':  '*',               // при желании укажи свой домен
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age':       '86400',           // кэшируем preflight сутки
+  'Access-Control-Max-Age':       '86400'            // кэшируем pre-flight на сутки
 };
 
 export default async function handler(req, res) {
-  // —- Preflight
+  /* ---------- pre-flight OPTIONS ---------- */
   if (req.method === 'OPTIONS') {
-    Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+    for (const [k, v] of Object.entries(corsHeaders)) res.setHeader(k, v);
     return res.status(200).end();
   }
 
-  // —- Разрешаем только POST
+  /* ---------- разрешаем только POST ---------- */
   if (req.method !== 'POST') {
-    Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+    for (const [k, v] of Object.entries(corsHeaders)) res.setHeader(k, v);
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // —- Общие CORS-заголовки к основному ответу
-  Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+  /* ---------- CORS для основного ответа ---------- */
+  for (const [k, v] of Object.entries(corsHeaders)) res.setHeader(k, v);
 
-  // —- Основная логика
+  /* ---------- основная логика ---------- */
   try {
     const { prompt } = req.body || {};
     if (!prompt) return res.status(400).json({ error: 'No prompt' });
 
-const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    // v1-endpoint + актуальная модель
+    const url =
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-    const gRes  = await fetch(url, {
+    const gRes = await fetch(url, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
+      body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }]
       })
     });
