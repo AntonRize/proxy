@@ -1,5 +1,5 @@
 // api/gemini.js  — Vercel, Node 20
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'nodejs' };
 
 /* ---- CORS ---- */
 const cors = {
