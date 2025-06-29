@@ -1,74 +1,64 @@
-// api/gemini.js  – Vercel Node 18 runtime
+import React, { useState, useEffect } from 'react';
 
-/* ---------- CORS ---------- */
-const cors = {
-  'Access-Control-Allow-Origin':  '*',               // при желании укажи точный домен
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age':       '86400'
-};
-
-/* ---------- список моделей по приоритету ---------- */
-const MODELS = [
-  'gemini-1.5-pro-latest',   // умнее, но 50 request/day
-  'gemini-1.0-pro'           // fallback без дневного потолка
+const KB_FILES = [
+  'WILL%20DATABASE/WILL%20PART%20I%20SR%20GR.txt',
+  'WILL%20DATABASE/WILL%20PART%20II%20COSMO%20.txt',
+  'WILL%20DATABASE/WILL%20PART%20III%20QM%20.txt'
 ];
 
-/* ---------- обработчик ---------- */
-export default async function handler(req, res) {
-  /* -- preflight CORS -- */
-  if (req.method === 'OPTIONS') {
-    Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
-    return res.status(200).end();
-  }
+const MAX_KB_CHARS = 30000;        // ← ограничиваем размер вставляемой базы
 
-  /* -- разрешаем только POST -- */
-  if (req.method !== 'POST') {
-    Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+async function loadKnowledge() {
+  const base = 'https://raw.githubusercontent.com/AntonRize/WILL/main/';
+  const texts = await Promise.all(
+    KB_FILES.map(path => fetch(base + path).then(r => r.text()))
+  );
+  return texts.join('\n');
+}
 
-  Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+export default function App() {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [knowledge, setKnowledge] = useState('');
 
-  /* ---------- основная логика ---------- */
-  try {
-    const { prompt } = req.body || {};
-    if (!prompt) return res.status(400).json({ error: 'No prompt' });
+  useEffect(() => { loadKnowledge().then(setKnowledge); }, []);
 
-    for (const model of MODELS) {
-      const url =
-        `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const sendMessage = async () => {
+    if (!input.trim()) return;
 
-      const gRes = await fetch(url, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }]
-        })
-      });
+    setMessages([...messages, { role: 'user', content: input }]);
+    setInput('');
 
-      /* --- если успешно, возвращаем ответ и модель --- */
-      if (gRes.ok) {
-        const gJson = await gRes.json();
-        const reply = gJson.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        return res.status(200).json({ reply, model });
-      }
+    const prompt = `${input}\n\nKnowledge:\n${knowledge.slice(0, MAX_KB_CHARS)}`;
 
-      /* --- ловим исчерпание квоты / запрет --- */
-      if ([429, 403].includes(gRes.status)) {
-        // переходим к следующей модели в списке
-        continue;
-      }
+    const res   = await fetch('https://proxy-flame-seven.vercel.app/api/gemini', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ prompt })
+    });
 
-      /* --- остальные ошибки проксируем как есть --- */
-      const errText = await gRes.text();
-      return res.status(gRes.status).json({ error: errText });
-    }
+    const data  = await res.json();
+    setMessages(m => [...m, { role: 'assistant', content: data.reply || data.error }]);
+  };
 
-    /* --- если все модели отказали по квоте --- */
-    return res.status(503).json({ error: 'All free-tier model quotas exhausted' });
+  return (
+    <div style={{ padding: 24, fontFamily: 'sans-serif' }}>
+      <h1>WILL AI Assistant</h1>
 
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+      {messages.map((m, i) => (
+        <div key={i} style={{ marginBottom: 8 }}>
+          <strong>{m.role === 'user' ? 'You' : 'AI'}:</strong> {m.content}
+        </div>
+      ))}
+
+      <input
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' ? sendMessage() : null}
+        placeholder="Ask something..."
+        style={{ width: '80%', marginRight: 8 }}
+      />
+      <button onClick={sendMessage}>Send</button>
+    </div>
+  );
 }
