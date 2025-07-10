@@ -10,4 +10,15 @@ export default async function handler(req, res) {
 
   const r = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
-    headers: {
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ client_id: id, client_secret: sec, code })
+  }).then(x => x.json());
+
+  if (!r.access_token) return res.status(500).json({ error: r.error_description || 'No token' });
+
+  res.setHeader('Content-Type', 'text/html');
+  res.status(200).send(`<!doctype html><html><body><script>
+      window.opener && window.opener.postMessage('authorization:github:${r.access_token}','*');
+      window.close();
+  </script></body></html>`);
+}
