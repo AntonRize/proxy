@@ -12,12 +12,8 @@ const cors = {
 };
 
 const MODELS = [
-  // 10 RPM / 1500 RPD
-  'gemini-2.0-flash-thinking-exp', 
-  //  ~15 RPM
-  'gemini-2.5-flash',              
-
-  'gemini-2.5-flash-lite'          
+  'gemini-1.5-pro-latest',  
+  'gemini-1.5-flash-latest'
 ];
 
 /* ---- handler ---- */
