@@ -3,7 +3,6 @@
 export const config = { runtime: 'nodejs' };
 
 /* ---- CORS ---- */
-
 const cors = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -17,7 +16,6 @@ const MODELS = [
 ];
 
 /* ---- handler ---- */
-
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
@@ -34,6 +32,9 @@ export default async function handler(req, res) {
   try {
     const { prompt } = req.body || {};
     if (!prompt) return res.status(400).json({ error: 'No prompt' });
+
+    let lastStatus = 503;
+    let lastError = 'All models exhausted';
 
     for (const model of MODELS) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -58,11 +59,20 @@ export default async function handler(req, res) {
         });
       }
 
+      // Запоминаем реальный статус и текст ошибки от Google
+      lastStatus = g.status;
+      lastError = await g.text();
+
+      // Если это лимиты (429) или проблема с ключом (403), пробуем следующую модель
       if ([429, 403].includes(g.status)) continue;
-      return res.status(g.status).json({ error: await g.text() });
+      
+      // Если это любая другая ошибка (например 500 от серверов Google), сразу прерываемся и отдаем её
+      return res.status(g.status).json({ error: lastError });
     }
 
-    return res.status(503).json({ error: 'All models exhausted' });
+    // Если цикл завершился (все модели выдали 429 или 403), мы больше не выдаем заглушку.
+    // Мы отдаем реальный ответ от Google, полученный при последней попытке.
+    return res.status(lastStatus).json({ error: lastError });
 
   } catch (e) {
     return res.status(500).json({ error: e.message });
