@@ -11,7 +11,7 @@ const cors = {
 };
 
 const MODELS = [
-  'gemini-2.5-flash'
+  'gemini-2.5-pro'
 ];
 
 //const MODELS = [
