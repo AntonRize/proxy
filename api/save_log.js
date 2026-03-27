@@ -41,11 +41,18 @@ export default async function handler(req, res) {
       ? firstUserMessage.raw.trim().substring(0, 50)
       : 'Conversation Log';
 
+    // Extract proper ISO date from sessionId
+    // sessionId format: "2026-03-26T05-43-29-778Z_Title_slug_here"
+    const dateMatch = sessionId.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d+)Z/);
+    const isoDate = dateMatch
+      ? `${dateMatch[1]}T${dateMatch[2]}:${dateMatch[3]}:${dateMatch[4]}.${dateMatch[5]}Z`
+      : new Date().toISOString();
+
     const content = [
       '---',
       'layout: log',
       `title: "${title.replace(/"/g, '\\"')}"`,
-      `date: ${sessionId}`,
+      `date: ${isoDate}`,
       `user_agent: "${ua.replace(/"/g, '\\"')}"`,
       '---',
       '',
