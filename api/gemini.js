@@ -34,12 +34,12 @@ export default async function handler(req, res) {
   }
 
   // If user forces MiniMax, go directly to it
-  if (forceModel === 'minimax') {
+  if (forceModel === 'qwen3.6') {
     if (!OPENROUTER_KEY) {
       return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured' });
     }
 
-    console.log('🔧 [MANUAL] User forced MiniMax M2.5 (free)');
+    console.log('🔧 [MANUAL] User forced qwen/qwen3.6-plus:free');
 
     const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
         'X-Title': 'WILL-AI'
       },
       body: JSON.stringify({
-        model: 'minimax/minimax-m2.5:free',
+        model: 'qwen/qwen3.6-plus:free',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -63,12 +63,12 @@ export default async function handler(req, res) {
     const orData = await openrouterRes.json();
     const reply = orData.choices?.[0]?.message?.content ?? '';
 
-    console.log('✅ [MINIMAX M2.5 FREE] Manual mode');
-    return res.status(200).json({ 
-      reply, 
-      model: 'minimax-m2.5-free',
-      mode: 'manual' 
-    });
+    console.log('✅ [QWEN3.6-plus:free] Manual mode');
+    return res.status(200).json({ 
+      reply, 
+      model: 'qwen3.6-plus-free', 
+      mode: 'manual' 
+    });
   }
 
   // Default behavior: Try Gemini first, fallback to MiniMax on quota error
@@ -112,7 +112,7 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'Gemini quota exceeded and no OpenRouter key configured.' });
     }
 
-    console.log('🔄 [AUTO FALLBACK] Gemini quota → MiniMax M2.5 free');
+    console.log('🔄 [AUTO FALLBACK] Gemini quota → QWEN3.6');
 
     const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -123,7 +123,7 @@ export default async function handler(req, res) {
         'X-Title': 'WILL-AI'
       },
       body: JSON.stringify({
-        model: 'minimax/minimax-m2.5:free',
+        model: 'qwen/qwen3.6-plus:free',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -136,10 +136,10 @@ export default async function handler(req, res) {
     const orData = await openrouterRes.json();
     const reply = orData.choices?.[0]?.message?.content ?? '';
 
-    console.log('✅ [MINIMAX M2.5 FREE] Auto fallback');
+    console.log('✅ [QWEN3.6 FREE] Auto fallback');
     return res.status(200).json({ 
       reply, 
-      model: 'minimax-m2.5-free',
+      model: 'qwen/qwen3.6-plus:free',
       mode: 'fallback' 
     });
 
