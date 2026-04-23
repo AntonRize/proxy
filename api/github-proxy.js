@@ -38,7 +38,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing method or path' });
     }
 
-    const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+    const GITHUB_TOKEN = process.env.GITHUB_TOKEN_Inesa;
     if (!GITHUB_TOKEN) {
         return res.status(500).json({ error: 'GitHub token not configured on server' });
     }
