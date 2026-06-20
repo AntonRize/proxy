@@ -30,14 +30,14 @@ export default async function handler(req, res) {
   const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
   // ============================================
-  // MANUAL MODE: Force Nemotron with reasoning
+  // MANUAL MODE: Nemotron with reasoning + streaming
   // ============================================
   if (forceModel === 'qwen3.6') {
     if (!OPENROUTER_KEY) {
       return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured' });
     }
 
-    console.log('🔧 [MANUAL] Using Nemotron 550B with reasoning');
+    console.log('🔧 [MANUAL] Streaming Nemotron 550B with reasoning');
 
     const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -50,10 +50,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
         messages: [{ role: 'user', content: prompt }],
-        stream: false,
-        reasoning: {
-          effort: 'high'
-        }
+        stream: true,
+        reasoning: { effort: 'high' }
       })
     });
 
@@ -62,19 +60,29 @@ export default async function handler(req, res) {
       return res.status(openrouterRes.status).json({ error: errText });
     }
 
-    const orData = await openrouterRes.json();
-    const reply = orData.choices?.[0]?.message?.content ?? '';
+    // Pipe the stream to client
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-    console.log('✅ [NEMOTRON 550B] Manual mode with reasoning');
-    return res.status(200).json({
-      reply,
-      model: 'nemotron-3-ultra-550b',
-      mode: 'manual'
-    });
+    const reader = openrouterRes.body.getReader();
+    const decoder = new TextDecoder();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(decoder.decode(value));
+      }
+    } finally {
+      res.end();
+    }
+
+    return;
   }
 
   // ============================================
-  // DEFAULT: Gemini first, fallback to Nemotron
+  // DEFAULT: Gemini first, fallback to Nemotron (non-streaming for now)
   // ============================================
   if (!GEMINI_KEY) {
     return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is not set' });
@@ -103,7 +111,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Check if we should fallback
     const errorText = await geminiRes.text();
     const shouldFallback =
       geminiRes.status === 429 ||
@@ -118,12 +125,11 @@ export default async function handler(req, res) {
       return res.status(geminiRes.status).json({ error: errorText });
     }
 
-    // Fallback to Nemotron with reasoning
     if (!OPENROUTER_KEY) {
       return res.status(429).json({ error: 'Gemini failed and no OpenRouter key configured.' });
     }
 
-    console.log('🔄 [AUTO FALLBACK] Gemini → Nemotron 550B with reasoning');
+    console.log('🔄 [AUTO FALLBACK] Gemini → Nemotron 550B streaming');
 
     const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -136,10 +142,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
         messages: [{ role: 'user', content: prompt }],
-        stream: false,
-        reasoning: {
-          effort: 'high'
-        }
+        stream: true,
+        reasoning: { effort: 'high' }
       })
     });
 
@@ -148,15 +152,25 @@ export default async function handler(req, res) {
       return res.status(openrouterRes.status).json({ error: errText });
     }
 
-    const orData = await openrouterRes.json();
-    const reply = orData.choices?.[0]?.message?.content ?? '';
+    // Stream the fallback response
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-    console.log('✅ [NEMOTRON 550B] Auto fallback with reasoning');
-    return res.status(200).json({
-      reply,
-      model: 'nemotron-3-ultra-550b',
-      mode: 'fallback'
-    });
+    const reader = openrouterRes.body.getReader();
+    const decoder = new TextDecoder();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(decoder.decode(value));
+      }
+    } finally {
+      res.end();
+    }
+
+    return;
 
   } catch (e) {
     console.error('Proxy error:', e.message);
