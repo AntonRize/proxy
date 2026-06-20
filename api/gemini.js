@@ -1,4 +1,4 @@
-// api/gemini.js - Vercel proxy with manual model selection + automatic fallback
+// api/gemini.js - Vercel proxy with Nemotron + reasoning + streaming
 export const config = { runtime: 'nodejs' };
 
 const cors = {
@@ -29,17 +29,15 @@ export default async function handler(req, res) {
   const GEMINI_KEY = process.env.GEMINI_API_KEY;
   const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
-  if (!GEMINI_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is not set' });
-  }
-
-  // If user forces MiniMax, go directly to it
+  // ============================================
+  // MANUAL MODE: Force Nemotron with reasoning
+  // ============================================
   if (forceModel === 'qwen3.6') {
     if (!OPENROUTER_KEY) {
       return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured' });
     }
 
-    console.log('🔧 [MANUAL] User forced qwen/qwen3.6-plus:free');
+    console.log('🔧 [MANUAL] Using Nemotron 550B with reasoning');
 
     const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -50,8 +48,12 @@ export default async function handler(req, res) {
         'X-Title': 'WILL-AI'
       },
       body: JSON.stringify({
-        model: 'qwen/qwen3.6-plus:free',
-        messages: [{ role: 'user', content: prompt }]
+        model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+        reasoning: {
+          effort: 'high'
+        }
       })
     });
 
@@ -63,15 +65,21 @@ export default async function handler(req, res) {
     const orData = await openrouterRes.json();
     const reply = orData.choices?.[0]?.message?.content ?? '';
 
-    console.log('✅ [QWEN3.6-plus:free] Manual mode');
-    return res.status(200).json({ 
-      reply, 
-      model: 'qwen3.6-plus-free', 
-      mode: 'manual' 
-    });
+    console.log('✅ [NEMOTRON 550B] Manual mode with reasoning');
+    return res.status(200).json({
+      reply,
+      model: 'nemotron-3-ultra-550b',
+      mode: 'manual'
+    });
   }
 
-  // Default behavior: Try Gemini first, fallback to MiniMax on quota error
+  // ============================================
+  // DEFAULT: Gemini first, fallback to Nemotron
+  // ============================================
+  if (!GEMINI_KEY) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is not set' });
+  }
+
   try {
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
 
@@ -86,33 +94,36 @@ export default async function handler(req, res) {
     if (geminiRes.ok) {
       const data = await geminiRes.json();
       const reply = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-      
+
       console.log('✅ [GEMINI 2.5 FLASH] Request served');
-      return res.status(200).json({ 
-        reply, 
+      return res.status(200).json({
+        reply,
         model: 'gemini-2.5-flash',
-        mode: 'auto' 
+        mode: 'auto'
       });
     }
 
+    // Check if we should fallback
     const errorText = await geminiRes.text();
-    const isQuotaError = 
+    const shouldFallback =
       geminiRes.status === 429 ||
+      geminiRes.status === 403 ||
       errorText.includes('RESOURCE_EXHAUSTED') ||
       errorText.includes('quota') ||
       errorText.includes('exceeded') ||
-      errorText.includes('free_tier_requests');
+      errorText.includes('free_tier_requests') ||
+      errorText.includes('PERMISSION_DENIED');
 
-    if (!isQuotaError) {
+    if (!shouldFallback) {
       return res.status(geminiRes.status).json({ error: errorText });
     }
 
-    // Automatic fallback
+    // Fallback to Nemotron with reasoning
     if (!OPENROUTER_KEY) {
-      return res.status(429).json({ error: 'Gemini quota exceeded and no OpenRouter key configured.' });
+      return res.status(429).json({ error: 'Gemini failed and no OpenRouter key configured.' });
     }
 
-    console.log('🔄 [AUTO FALLBACK] Gemini quota → QWEN3.6');
+    console.log('🔄 [AUTO FALLBACK] Gemini → Nemotron 550B with reasoning');
 
     const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -123,8 +134,12 @@ export default async function handler(req, res) {
         'X-Title': 'WILL-AI'
       },
       body: JSON.stringify({
-        model: 'qwen/qwen3.6-plus:free',
-        messages: [{ role: 'user', content: prompt }]
+        model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+        reasoning: {
+          effort: 'high'
+        }
       })
     });
 
@@ -136,11 +151,11 @@ export default async function handler(req, res) {
     const orData = await openrouterRes.json();
     const reply = orData.choices?.[0]?.message?.content ?? '';
 
-    console.log('✅ [QWEN3.6 FREE] Auto fallback');
-    return res.status(200).json({ 
-      reply, 
-      model: 'qwen/qwen3.6-plus:free',
-      mode: 'fallback' 
+    console.log('✅ [NEMOTRON 550B] Auto fallback with reasoning');
+    return res.status(200).json({
+      reply,
+      model: 'nemotron-3-ultra-550b',
+      mode: 'fallback'
     });
 
   } catch (e) {
